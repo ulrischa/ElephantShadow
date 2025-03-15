@@ -1,8 +1,6 @@
 # ElephantShadow
 Use PHP for SSR of Webcomponents in declarative shadow dom. Just take the old elephant - he has a big shadow.
 
-Below is a fresh, comprehensive description of ElephantShadow, covering all its key features—including how it handles CSS, either by embedding it inline or by linking it externally—along with usage examples.
-
 ---
 
 ## Overview
