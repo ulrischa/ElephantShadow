@@ -59,113 +59,90 @@ class ElephantShadow {
     }
 
     /**
-     * Transforms a single custom element (as HTML string) into a complete code block with SSR.
-     * Determines resources via data attributes, naming conventions, and falls back to JS extraction.
+     * Resolves resource paths (template, CSS, JS) based on data attributes and naming conventions.
      *
-     * @param string      $elementHtml The HTML of the custom element (with slots and attributes)
-     * @param string|null $templatePath Optional explicit path to the HTML template file.
-     * @param string|null $jsPath       Optional explicit path to the JavaScript file.
-     * @param string|null $cssPath      Optional explicit path to the CSS file.
-     * @param bool        $embedCss     If true, CSS is embedded inline; otherwise a <link> is used.
-     *
-     * @return string The generated HTML code block for the custom element.
-     * @throws Exception if a required file cannot be loaded.
+     * @param DOMElement $element The custom element.
+     * @param string $tagName Lowercase tag name of the custom element.
+     * @param string|null $templatePath Explicit template path if provided.
+     * @param string|null $cssPath Explicit CSS path if provided.
+     * @param string|null $jsPath Explicit JS path if provided.
+     * @return array An array with keys [templatePath, cssPath, jsPath].
      */
-    public function renderWebComponent($elementHtml, $templatePath = null, $jsPath = null, $cssPath = null, $embedCss = true) {
-        // Ensure input is treated as UTF-8
-        $elementHtml = mb_convert_encoding($elementHtml, 'HTML-ENTITIES', 'UTF-8');
-
-        $doc = new DOMDocument();
-        libxml_use_internal_errors(true);
-        $doc->loadHTML($elementHtml, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
-        libxml_clear_errors();
-
-        $customElement = $doc->documentElement;
-        $tagName = strtolower($customElement->tagName);
-
-        // Determine resource paths based on data attributes and naming conventions
-        if ($customElement->hasAttribute("data-template")) {
-            $templatePath = $this->templateDir . $customElement->getAttribute("data-template");
+    private function resolveResourcePaths(DOMElement $element, string $tagName, ?string $templatePath, ?string $cssPath, ?string $jsPath): array {
+        // Template resolution
+        if ($element->hasAttribute("data-template")) {
+            $templatePath = $this->templateDir . $element->getAttribute("data-template");
         } elseif (!$templatePath) {
-            // Check if a template file exists according to naming convention
             $possibleTemplatePath = $this->templateDir . $tagName . '.html';
             if (file_exists($possibleTemplatePath)) {
                 $templatePath = $possibleTemplatePath;
             }
         }
-
-        if ($customElement->hasAttribute("data-css")) {
-            $cssPath = $this->cssDir . $customElement->getAttribute("data-css");
+        // CSS resolution
+        if ($element->hasAttribute("data-css")) {
+            $cssPath = $this->cssDir . $element->getAttribute("data-css");
         } elseif (!$cssPath) {
-            // Check if a CSS file exists according to naming convention
             $possibleCssPath = $this->cssDir . $tagName . '.css';
             if (file_exists($possibleCssPath)) {
                 $cssPath = $possibleCssPath;
             }
         }
-
-        if ($customElement->hasAttribute("data-js")) {
-            $jsPath = $this->jsDir . $customElement->getAttribute("data-js");
+        // JS resolution
+        if ($element->hasAttribute("data-js")) {
+            $jsPath = $this->jsDir . $element->getAttribute("data-js");
         } elseif (!$jsPath) {
             $jsPath = $this->jsDir . $tagName . '.js';
         }
-
-        // Determine template content:
-        // If a templatePath is set, load it.
-        // Otherwise, if the JS file exists and ends with .js, try extracting the template from it.
-        if (isset($templatePath)) {
-            $templateContent = self::loadFile($templatePath);
-        } elseif ($jsPath && substr($jsPath, -3) === '.js') {
-            $templateContent = $this->extractTemplateFromJS($jsPath);
-        } else {
-            throw new Exception("No valid template source found for <$tagName>");
-        }
-
-        // Load CSS (if available) and JS via cache
-        $cssContent = ($embedCss && isset($cssPath)) ? self::loadFile($cssPath) : null;
-        $jsContent = self::loadFile($jsPath);
-
-        // Render the component using the templating engine
-        $renderedElement = $this->renderComponentWithTemplate($customElement, $templateContent, $cssContent, $embedCss);
-
-        // Wrap the JS code as a module to register the component if not already defined
-        $wrappedJs = <<<EOD
-<script type="module">
-if (!customElements.get('$tagName')) {
-  $jsContent
-}
-</script>
-EOD;
-        return $renderedElement . "\n" . $wrappedJs;
+        return [$templatePath, $cssPath, $jsPath];
     }
 
     /**
-     * Renders a custom element using a template.
-     * Replaces attribute placeholders, processes slots, and wraps the output in a declarative Shadow DOM.
+     * Processes data bindings in the template.
+     * For each element with a "data-bind" attribute, sets its text content to the corresponding attribute value from the custom element.
      *
-     * @param DOMElement $element       The custom element
-     * @param string     $templateHtml  The HTML template (with placeholders and <slot> elements).
-     * @param string|null $cssContent    Optional CSS content.
-     * @param bool       $embedCss      Whether to embed CSS inline.
-     * @return string Rendered HTML of the custom element.
+     * @param DOMElement $templateElement The template element containing the DOM structure.
+     * @param DOMElement $sourceElement   The custom element.
      */
-    private function renderComponentWithTemplate(DOMElement $element, string $templateHtml, ?string $cssContent, bool $embedCss): string {
-        $tag = $element->tagName;
-        // (1) Replace attribute placeholders
-        foreach ($element->attributes as $attr) {
-            $name = $attr->name;
-            $value = htmlspecialchars($attr->value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-            $templateHtml = str_replace("{{{$name}}}", $value, $templateHtml);
+    private function processDataBindings(DOMElement $templateElement, DOMElement $sourceElement): void {
+        foreach ($templateElement->getElementsByTagName('*') as $node) {
+            if ($node->hasAttribute('data-bind')) {
+                $bindAttr = $node->getAttribute('data-bind');
+                $value = $sourceElement->getAttribute($bindAttr);
+                $node->nodeValue = htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            }
         }
-        // Remove any unreplaced placeholders
-        $templateHtml = preg_replace('/\{\{[^}]+\}\}/', '', $templateHtml);
+    }
 
-        // (2) Process slots: load template HTML into a DOMDocument to process <slot> elements
+    /**
+     * Loads and processes the template.
+     * Loads the template content, processes data bindings and slots, and optionally embeds CSS.
+     *
+     * @param string $templateContent The raw template content.
+     * @param DOMElement $sourceElement The custom element.
+     * @param string|null $cssContent Optional CSS content.
+     * @param bool $embedCss Whether to embed CSS inline.
+     * @return string The processed template.
+     */
+    private function loadAndProcessTemplate(string $templateContent, DOMElement $sourceElement, ?string $cssContent, bool $embedCss): string {
         $templateDom = new DOMDocument();
-        @$templateDom->loadHTML('<?xml encoding="UTF-8"><template>' . $templateHtml . '</template>');
+        // Load the template HTML wrapped in a <template> tag
+        @$templateDom->loadHTML('<?xml encoding="UTF-8"><template>' . $templateContent . '</template>');
+        $templateTag = $templateDom->getElementsByTagName('template')->item(0);
+        // Process data bindings
+        $this->processDataBindings($templateTag, $sourceElement);
+        $processedTemplate = '';
+        foreach ($templateTag->childNodes as $child) {
+            $processedTemplate .= $templateDom->saveHTML($child);
+        }
+        // Optionally embed CSS inline
+        if ($embedCss && $cssContent) {
+            $processedTemplate = '<style>' . $cssContent . '</style>' . $processedTemplate;
+        }
+        // Process slots
+        @$templateDom->loadHTML('<?xml encoding="UTF-8"><template>' . $processedTemplate . '</template>');
         $templateTag = $templateDom->getElementsByTagName('template')->item(0);
         $slots = iterator_to_array($templateTag->getElementsByTagName('slot'));
-        $childrenBySlot = $this->groupChildrenBySlot($element);
+        $childrenBySlot = $this->groupChildrenBySlot($sourceElement);
         foreach ($slots as $slotElement) {
             $nameAttr = $slotElement->getAttribute('name');
             $slotName = $nameAttr !== '' ? $nameAttr : '__default__';
@@ -181,26 +158,33 @@ EOD;
                 }
             }
             $slotOuterHTML = $templateDom->saveHTML($slotElement);
-            $templateHtml = str_replace($slotOuterHTML, $replacementHtml, $templateHtml);
+            $processedTemplate = str_replace($slotOuterHTML, $replacementHtml, $processedTemplate);
         }
+        return $processedTemplate;
+    }
 
-        // (3) Optionally embed CSS inline
-        if ($embedCss && $cssContent) {
-            $templateHtml = '<style>' . $cssContent . '</style>' . $templateHtml;
-        }
-
-        // (4) Wrap the processed template in a declarative Shadow DOM
-        $shadowContent = '<template shadowroot="open">' . $templateHtml . '</template>';
-
-        // (5) Rebuild the host element with original attributes, shadow DOM, and light DOM children
+    /**
+     * Renders a custom element using a processed template.
+     * Wraps the processed template in a declarative Shadow DOM and rebuilds the host element.
+     *
+     * @param DOMElement $element The custom element.
+     * @param string $templateContent The raw template content.
+     * @param string|null $cssContent Optional CSS content.
+     * @param bool $embedCss Whether to embed CSS inline.
+     * @return string The rendered HTML for the custom element.
+     */
+    private function renderComponentWithTemplate(DOMElement $element, string $templateContent, ?string $cssContent, bool $embedCss): string {
+        $tag = $element->tagName;
+        $processedTemplate = $this->loadAndProcessTemplate($templateContent, $element, $cssContent, $embedCss);
+        $shadowContent = '<template shadowroot="open">' . $processedTemplate . '</template>';
+        // Rebuild host element with original attributes and light DOM children.
         $result = '<' . $tag;
         foreach ($element->attributes as $attr) {
             $name = $attr->name;
             $value = htmlspecialchars($attr->value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
             $result .= " $name=\"$value\"";
         }
-        $result .= '>';
-        $result .= $shadowContent;
+        $result .= '>' . $shadowContent;
         foreach ($element->childNodes as $childNode) {
             $result .= $this->renderNode($childNode);
         }
@@ -210,7 +194,7 @@ EOD;
 
     /**
      * Recursively renders a DOMNode.
-     * Text nodes are escaped; element nodes are built with their attributes and children.
+     * Escapes text nodes and builds element nodes with their attributes and children.
      *
      * @param DOMNode $node
      * @return string
@@ -239,10 +223,9 @@ EOD;
 
     /**
      * Groups an element's children by slot name.
-     * Returns an array: 'slotName' => [DOMNode, ...] and '__default__' for unnamed children.
      *
      * @param DOMElement $element
-     * @return array
+     * @return array Associative array: 'slotName' => [DOMNode, ...] and '__default__' for unnamed children.
      */
     private function groupChildrenBySlot(DOMElement $element): array {
         $groups = [];
@@ -267,24 +250,21 @@ EOD;
 
     /**
      * Transforms an entire HTML page by processing all custom elements
-     * (i.e., all elements whose tag names contain a hyphen).
-     * Nested web components are processed from the innermost outward.
+     * (i.e., elements whose tag names contain a hyphen).
+     * Processes nested web components from the innermost outward.
      *
      * @param string $pageHtml The full HTML code of the page.
-     * @param bool   $embedCss Controls whether CSS is embedded inline.
-     * @return string The full HTML of the page with transformed web components.
+     * @param bool $embedCss Whether CSS is embedded inline.
+     * @return string The full HTML with transformed web components.
      */
-    public function renderFullPage($pageHtml, $embedCss = true) {
+    public function renderFullPage($pageHtml, $embedCss = true): string {
         $pageHtml = mb_convert_encoding($pageHtml, 'HTML-ENTITIES', 'UTF-8');
-
         $doc = new DOMDocument();
         libxml_use_internal_errors(true);
         $doc->loadHTML($pageHtml);
         libxml_clear_errors();
-
         $xpath = new DOMXPath($doc);
         $customNodes = $xpath->query("//*[contains(local-name(),'-')]");
-
         $nodesToProcess = [];
         foreach ($customNodes as $node) {
             $depth = 0;
@@ -295,16 +275,13 @@ EOD;
             }
             $nodesToProcess[] = ['node' => $node, 'depth' => $depth];
         }
-
         usort($nodesToProcess, function($a, $b) {
             return $b['depth'] - $a['depth'];
         });
-
         foreach ($nodesToProcess as $item) {
             $node = $item['node'];
             $elementHtml = $doc->saveHTML($node);
             $rendered = $this->renderWebComponent($elementHtml, null, null, null, $embedCss);
-
             $fragment = $doc->createDocumentFragment();
             $tmpDoc = new DOMDocument();
             libxml_use_internal_errors(true);
@@ -327,7 +304,7 @@ EOD;
      * Starts output buffering with a callback that automatically transforms
      * the entire page output when flushed.
      *
-     * @param bool $embedCss Controls whether CSS is embedded inline.
+     * @param bool $embedCss Whether CSS is embedded inline.
      */
     public static function init($embedCss = true) {
         ob_start(function($buffer) use ($embedCss) {
