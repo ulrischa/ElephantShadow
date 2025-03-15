@@ -1,171 +1,89 @@
 # ElephantShadow
 Use PHP for SSR of Webcomponents in declarative shadow dom. Just take the old elephant - he has a big shadow.
 
----
+**ElephantShadow** is a PHP-based server-side rendering (SSR) engine for Web Components. It enables HTML authors to write standard custom elements (using attributes and slots) that are automatically transformed into fully rendered Web Components with declarative Shadow DOM. This approach ensures that your pages are SEO-friendly, accessible, and provide a fully working fallback even if JavaScript is disabled.
 
-## Overview
+## Features
 
-**ElephantShadow** is a PHP solution for server-side rendering (SSR) of web components using declarative Shadow DOM. Its purpose is to let HTML authors write custom elements with attributes and slots directly in HTML while the server transforms them into fully rendered web components. This yields significant benefits for SEO, accessibility, and progressive enhancement because the complete content is already available on page load—even if JavaScript is disabled.
+- **Server-Side Rendering (SSR):**  
+  Transforms custom elements written in HTML into fully rendered components on the server. This means that all content—including component structure, CSS, and light DOM—is present in the initial HTML output.
 
-### Key Features
+- **Declarative Shadow DOM:**  
+  Wraps component templates in a `<template shadowroot="open">` so that modern browsers can directly create a Shadow DOM from the SSR output.
 
-- **Declarative Shadow DOM Rendering:**  
-  Each custom element is transformed so that its content is wrapped in a `<template shadowroot="open">`. This ensures that styles and markup are encapsulated as they would be in a client-side Shadow DOM.
+- **Resource Resolution:**  
+  Automatically loads the component’s template, CSS, and JS based on naming conventions or data attributes. For example, for a `<my-component>` element:
+  - The template is searched in the `templates/` directory as `my-component.html`.
+  - The CSS is searched in the `css/` directory as `my-component.css`.
+  - The JS is searched in the `js/` directory as `my-component.js`.
 
-- **Attribute Replacement & Slot Processing:**  
-  A simple templating syntax (using placeholders like `{{attribute}}`) is used to replace attribute values in the component’s HTML template. The system also processes `<slot>` elements, distributing the custom element’s children to their correct positions.
+- **JS Fallback Extraction:**  
+  If a separate template file is not found, ElephantShadow can extract the template from a JS file by searching for the `this.shadowRoot.innerHTML = \`...\`` pattern.
 
-- **Resource Resolution via Naming Conventions:**  
-  ElephantShadow automatically looks for separate resource files using naming conventions. For a custom element such as `<my-component>`:
-  - It checks for a template file in the `templates/` directory (e.g., `templates/my-component.html`).
-  - It checks for a CSS file in the `css/` directory (e.g., `css/my-component.css`).
-  - It checks for a JavaScript file in the `js/` directory (e.g., `js/my-component.js`).
-  
-  If a separate HTML template is not found, it falls back to extracting the template block directly from the JS file by searching for the pattern `this.shadowRoot.innerHTML = \`...\``.
+- **CSS Embedding vs. Linking:**  
+  You can choose to either embed the CSS inline within the Shadow DOM or link to an external CSS file.
 
-- **Flexible CSS Handling – Embedding vs. Linking:**  
-  ElephantShadow allows you to choose how CSS is delivered:
-  - **Embedding (Inline):** If you set the flag to embed CSS, the CSS content is included directly in the generated Shadow DOM inside a `<style>` tag.
-  - **Linking (External):** If embedding is turned off, ElephantShadow will create a `<link rel="stylesheet">` element pointing to the appropriate CSS file. This can be useful if you prefer caching or want to serve CSS separately.
+- **Data Binding using Standard Web Component Practices:**  
+  Instead of using non-standard placeholders like `{{text}}`, ElephantShadow uses a `data-bind` attribute. For example, an element like `<p data-bind="message"></p>` will be filled with the value of the `message` attribute from the custom element.
 
-- **Automatic JavaScript Registration:**  
-  The loaded JavaScript file is wrapped in a `<script type="module">` block that checks whether the custom element is already defined before registering it. This ensures the component is properly registered on the client side without duplication.
+- **Slot Processing:**  
+  The engine processes `<slot>` elements and automatically assigns the light DOM children to their corresponding slots. Default content in slots is preserved if no matching light DOM child is provided.
 
-- **Full-Page Rendering:**  
-  In addition to rendering single components, ElephantShadow provides a method to process an entire HTML page. It locates all custom elements (identified by a hyphen in the tag name) and replaces them with their SSR-generated output. Nested components are processed from the innermost outward.
+- **Full Page Rendering:**  
+  The `renderFullPage()` method processes an entire HTML page, handling nested components from the innermost outward.
 
----
+- **Automatic Component Registration:**  
+  The JS code is appended in a `<script type="module">` block that registers the component only if it hasn’t been defined yet.
 
-## Usage Examples
+## Example Usage
 
-### 1. Component with Separate Resources and Embedded CSS
+### 1. Component Definition
 
-**Author's HTML Input:**
-
-```html
-<my-card message="Hello from SSR">
-  <p slot="body">This is some additional content for the card.</p>
-</my-card>
-```
-
-**Files in Your Project:**
-
-- **Template (`templates/my-card.html`):**
-
-  ```html
-  <div class="card">
-    <p>{{message}}</p>
-    <div class="card-body">
-      <slot name="body">Default content for the card.</slot>
-    </div>
-  </div>
-  ```
-
-- **CSS (`css/my-card.css`):**
-
-  ```css
-  :host {
-    display: block;
-    padding: 10px;
-    background: #f9f9f9;
-    border: 1px solid #ddd;
-    border-radius: 5px;
-    font-family: sans-serif;
-  }
-  ```
-
-- **JavaScript (`js/my-card.js`):**
-
-  ```js
-  customElements.define('my-card', class extends HTMLElement {});
-  ```
-
-**Processing & Resulting SSR Output (with CSS Embedded Inline):**
-
-```html
-<my-card message="Hello from SSR">
-  <template shadowroot="open">
-    <style>
-      :host {
-        display: block;
-        padding: 10px;
-        background: #f9f9f9;
-        border: 1px solid #ddd;
-        border-radius: 5px;
-        font-family: sans-serif;
-      }
-    </style>
-    <div class="card">
-      <p>Hello from SSR</p>
-      <div class="card-body">
-        <p>This is some additional content for the card.</p>
-      </div>
-    </div>
-  </template>
-  <p slot="body">This is some additional content for the card.</p>
-</my-card>
-<script type="module">
-if (!customElements.get('my-card')) {
-  customElements.define('my-card', class extends HTMLElement {});
-}
-</script>
-```
-
-**Explanation:**  
-- The template file is loaded and the placeholder `{{message}}` is replaced by the attribute value.
-- The CSS file is also loaded and, because the embed flag is set to true, its content is wrapped in a `<style>` tag inside the Shadow DOM.
-- The `<slot name="body">` is filled with the content provided by the author.
-- The JavaScript file is included and wrapped in a module script for client-side registration.
-
----
-
-### 2. Component with JS-Embedded Template and Linked CSS
-
-In this example, there is no separate HTML template file. Instead, the template is embedded in the JS file, but the CSS is served as an external file.
-
-**Author's HTML Input:**
-
-```html
-<my-component message="Dynamic message">
-  <p>This is slotted content.</p>
-</my-component>
-```
-
-**JavaScript File (`js/my-component.js`):**
+Assume you have a Web Component defined in JavaScript (e.g., `js/my-component.js`):
 
 ```js
+// js/my-component.js
 class MyComponent extends HTMLElement {
     constructor() {
         super();
         this.attachShadow({ mode: 'open' });
     }
+
     static get observedAttributes() {
         return ['message'];
     }
+
     attributeChangedCallback(name, oldValue, newValue) {
         if (name === 'message') {
             this.render();
         }
     }
+
     connectedCallback() {
         this.render();
     }
+
     render() {
         this.shadowRoot.innerHTML = `
             <style>
                 :host {
                     display: block;
                     padding: 10px;
-                    background: #e0f7fa;
+                    background: #f0f0f0;
                     border-radius: 5px;
-                    font-family: sans-serif;
+                    font-family: Arial, sans-serif;
                 }
             </style>
             <p>${this.getAttribute('message') || 'Default message'}</p>
             <div>
-                <h3>Children:</h3>
-                <slot></slot>
+                <h3>Child Elements:</h3>
+                <ul>
+                    <li>Item 1</li>
+                    <li>Item 2</li>
+                    <li>Item 3</li>
+                </ul>
             </div>
+            <slot></slot>
         `;
     }
 }
@@ -173,95 +91,128 @@ class MyComponent extends HTMLElement {
 customElements.define('my-component', MyComponent);
 ```
 
-**CSS File (`css/my-component.css`):**
+### 2. Template and CSS Files (Optional)
+
+You can also have separate template and CSS files based on naming conventions.
+
+**Template (`templates/my-component.html`):**
+
+```html
+<!-- templates/my-component.html -->
+<p data-bind="message"></p>
+<div>
+  <h3>Child Elements:</h3>
+  <ul>
+      <li>Item 1</li>
+      <li>Item 2</li>
+      <li>Item 3</li>
+  </ul>
+</div>
+<slot></slot>
+```
+
+**CSS (`css/my-component.css`):**
 
 ```css
-/* Additional styling that is served externally */
-.my-component-extra {
-    color: darkblue;
+/* css/my-component.css */
+:host {
+    display: block;
+    padding: 10px;
+    background: #f0f0f0;
+    border-radius: 5px;
+    font-family: Arial, sans-serif;
 }
 ```
 
-**Processing & Resulting SSR Output (with CSS Linked Externally):**
+### 3. Authoring the Component in HTML
+
+HTML authors can use the component as follows:
 
 ```html
-<my-component message="Dynamic message">
+<my-component message="Hello from SSR">
+  <p slot="default">This is additional slot content.</p>
+</my-component>
+```
+
+### 4. Resulting SSR Output
+
+After processing by ElephantShadow, the output HTML will look similar to this:
+
+```html
+<my-component message="Hello from SSR">
   <template shadowroot="open">
-    <!-- Note: Since there is no separate HTML template file, the template is extracted from the JS file -->
-    <link rel="stylesheet" href="css/my-component.css">
     <style>
-        :host {
-            display: block;
-            padding: 10px;
-            background: #e0f7fa;
-            border-radius: 5px;
-            font-family: sans-serif;
-        }
+      :host {
+          display: block;
+          padding: 10px;
+          background: #f0f0f0;
+          border-radius: 5px;
+          font-family: Arial, sans-serif;
+      }
     </style>
-    <p>Dynamic message</p>
+    <p>Hello from SSR</p>
     <div>
-        <h3>Children:</h3>
-        <slot></slot>
+      <h3>Child Elements:</h3>
+      <ul>
+          <li>Item 1</li>
+          <li>Item 2</li>
+          <li>Item 3</li>
+      </ul>
     </div>
+    <slot></slot>
   </template>
-  <p>This is slotted content.</p>
+  <p slot="default">This is additional slot content.</p>
 </my-component>
 <script type="module">
 if (!customElements.get('my-component')) {
+  // JS code from js/my-component.js is included here
   customElements.define('my-component', class extends HTMLElement {});
 }
 </script>
 ```
 
-**Explanation:**  
-- The system does not find a separate template file; therefore, it extracts the template from the JS file.
-- For CSS, it checks and finds an external CSS file. Since the embed flag is set to false, the CSS is not embedded inline but is instead linked via a `<link rel="stylesheet">` element.
-- The component’s Shadow DOM is constructed from the extracted template, and slot content is inserted appropriately.
-- The JS file is still wrapped and included for client-side registration.
+## How It Works
 
----
+1. **Resource Resolution:**  
+   ElephantShadow first checks for `data-template`, `data-css`, and `data-js` attributes. If not provided, it uses naming conventions (e.g., `templates/my-component.html`, `css/my-component.css`, `js/my-component.js`).
 
-### 3. Full-Page Rendering
+2. **Template Processing:**  
+   The template is loaded and processed by:
+   - Replacing elements with a `data-bind` attribute with the corresponding attribute value from the custom element.
+   - Processing `<slot>` elements by mapping light DOM children to their respective slots.
+   - Optionally embedding the CSS inline if desired.
 
-You can use ElephantShadow to process an entire HTML page containing multiple custom elements. The `renderFullPage()` method or the static `init()` function will recursively transform all custom elements based on their resource files or embedded templates.
+3. **Declarative Shadow DOM:**  
+   The processed template is wrapped in a `<template shadowroot="open">` block so that the browser can automatically attach a Shadow DOM.
 
-**Example HTML Page Input:**
+4. **Full Page Rendering:**  
+   The `renderFullPage()` method processes an entire HTML document and recursively handles nested custom elements from the innermost outward.
 
-```html
+5. **Automatic JS Registration:**  
+   The associated JS code is appended in a `<script type="module">` block to ensure the component is registered on the client side.
+
+## Initialization
+
+To automatically process your page output, simply call the `init()` method at the beginning of your PHP page:
+
+```php
+<?php
+require 'ElephantShadow.php';
+ElephantShadow::init(); // Optionally pass true/false to embed CSS inline
+?>
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="UTF-8">
   <title>My SSR Page</title>
 </head>
 <body>
-  <my-header message="Welcome to My Site"></my-header>
-  <my-card message="Card Message">
-    <p slot="body">Card content goes here.</p>
-  </my-card>
-  <my-component message="JS Template Example">
-    <p>This content is in the default slot.</p>
+  <!-- Your HTML content with custom elements goes here -->
+  <my-component message="Hello from SSR">
+    <p slot="default">This is additional slot content.</p>
   </my-component>
 </body>
 </html>
 ```
 
-Assuming:
-- Separate template and CSS files exist for `my-header` and `my-card`,
-- And `my-component` uses an embedded template in its JS file (with CSS linked externally),
-
-**Processing:**
-
-You can process the page by calling:
-
-```php
-$pageOutput = $elephantShadow->renderFullPage($inputHtml, /* embedCss */ true);
-```
-
-Or, to initialize it automatically:
-
-```php
-ElephantShadow::init();
-```
-
-**Resulting SSR Page:**  
-All custom elements in the page will be transformed into their SSR-generated versions with declarative Shadow DOM, complete with correctly embedded or linked CSS, and the JS registration code appended for each component
+ElephantShadow intercepts the output buffer, processes the HTML, and replaces custom elements with fully rendered components.
