@@ -150,10 +150,5 @@ Then, your page can look like this:
 - **Automatic Output Buffering:**  
   `ElephantShadow::init()` starts output buffering with a callback that processes the entire page output when the script ends. No additional call is needed at the end.
 - **Nested Component Support:**  
-  In the example, `<my-b>` is nested within `<my-a>`. The renderer processes the deepest components first, ensuring proper transformation of all nested components.
-
----
-
-These examples illustrate how you can use all features of the `ElephantShadow` class—from transforming individual web components with data attributes or explicit paths to automatically transforming an entire page with nested components. Simply copy these examples into your GitHub README to help other developers understand how to integrate and use the class in their projects.
-``` 
+  In the example, `<my-b>` is nested within `<my-a>`. The renderer processes the deepest components first, ensuring proper transformation of all nested components
 
