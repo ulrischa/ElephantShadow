@@ -22,7 +22,7 @@ class ElephantShadow {
     }
 
     /**
-     * Loads a file, converts the content to HTML entities (UTF-8) and caches the result.
+     * Loads a file, converts its content to HTML entities (UTF-8) and caches the result.
      *
      * @param string $filePath
      * @return string
@@ -85,7 +85,7 @@ class ElephantShadow {
             $jsPath = $this->jsDir . $tagName . '.js';
         }
 
-        // Load the template, CSS, and JS using the cache
+        // Load template, CSS, and JS using the cache
         $templateContent = self::loadFile($templatePath);
         if ($embedCss) {
             $cssContent = self::loadFile($cssPath);
@@ -109,7 +109,7 @@ class ElephantShadow {
         }
         $tempDoc = new DOMDocument();
         libxml_use_internal_errors(true);
-        // Ensure that the template content is treated as UTF-8
+        // Ensure the template content is treated as UTF-8
         $templateContent = mb_convert_encoding($templateContent, 'HTML-ENTITIES', 'UTF-8');
         $tempDoc->loadHTML($templateContent, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
         libxml_clear_errors();
@@ -139,6 +139,7 @@ EOD;
 
     /**
      * Transforms an entire HTML page by processing all custom elements (elements whose tag name contains a dash).
+     * This version supports nested web components by processing the deepest nodes first.
      *
      * @param string $pageHtml The full HTML code of the page.
      * @param bool   $embedCss Controls whether CSS is embedded inline or referenced externally.
@@ -158,12 +159,26 @@ EOD;
         $xpath = new DOMXPath($doc);
         $customNodes = $xpath->query("//*[contains(local-name(),'-')]");
 
+        // Collect nodes with their depth (deepest nodes first)
         $nodesToProcess = [];
         foreach ($customNodes as $node) {
-            $nodesToProcess[] = $node;
+            $depth = 0;
+            $temp = $node;
+            while ($temp->parentNode !== null) {
+                $depth++;
+                $temp = $temp->parentNode;
+            }
+            $nodesToProcess[] = ['node' => $node, 'depth' => $depth];
         }
 
-        foreach ($nodesToProcess as $node) {
+        // Sort descending by depth so that nested components are processed first.
+        usort($nodesToProcess, function($a, $b) {
+            return $b['depth'] - $a['depth'];
+        });
+
+        // Process each custom element
+        foreach ($nodesToProcess as $item) {
+            $node = $item['node'];
             $elementHtml = $doc->saveHTML($node);
             $rendered = $this->renderWebComponent($elementHtml, null, null, null, $embedCss);
 
