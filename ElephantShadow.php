@@ -7,6 +7,8 @@ class ElephantShadow {
 
     // Cache for loaded files (filepath => content)
     private static $fileCache = [];
+    // Collected JS snippets keyed by component tag name
+    private static $collectedJs = [];
 
     /**
      * Constructor to set default directories.
@@ -51,7 +53,6 @@ class ElephantShadow {
      */
     private function extractTemplateFromJS($jsFilePath): string {
         $jsContent = self::loadFile($jsFilePath);
-        // Use regex to extract content between backticks after "this.shadowRoot.innerHTML ="
         if (preg_match('/this\.shadowRoot\.innerHTML\s*=\s*`(.*?)`/s', $jsContent, $matches)) {
             return $matches[1];
         }
@@ -194,8 +195,10 @@ class ElephantShadow {
 
     /**
      * Public method to render a single custom element.
-     * This method accepts the HTML string of the custom element, resolves its resources,
-     * processes the template, and returns the SSR-rendered HTML.
+     * Accepts the HTML string of the custom element, resolves its resources,
+     * processes the template, and returns the SSR-rendered HTML without inlined JS.
+     *
+     * The JS registration code is collected separately.
      *
      * @param string      $elementHtml The HTML markup of the custom element.
      * @param string|null $templatePath Optional explicit template path.
@@ -205,12 +208,11 @@ class ElephantShadow {
      * @return string The SSR-rendered HTML of the custom element.
      */
     public function renderWebComponent($elementHtml, $templatePath = null, $jsPath = null, $cssPath = null, $embedCss = true): string {
-        // Convert the input HTML to UTF-8 for safe processing.
+        // Convert input HTML to UTF-8.
         $elementHtml = mb_convert_encoding($elementHtml, 'HTML-ENTITIES', 'UTF-8');
-
         $doc = new DOMDocument();
         libxml_use_internal_errors(true);
-        // Load the element HTML as a fragment.
+        // Load the element as a fragment.
         $doc->loadHTML($elementHtml, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
         libxml_clear_errors();
 
@@ -222,7 +224,7 @@ class ElephantShadow {
         list($templatePath, $cssPath, $jsPath) = $this->resolveResourcePaths($customElement, $tagName, $templatePath, $cssPath, $jsPath);
 
         // Determine template content:
-        // If a template file exists, load it; otherwise, if a JS file is provided, extract the template from it.
+        // If a template file exists, load it; otherwise, extract from JS.
         if ($templatePath) {
             $templateContent = self::loadFile($templatePath);
         } elseif ($jsPath && substr($jsPath, -3) === '.js') {
@@ -231,22 +233,19 @@ class ElephantShadow {
             throw new Exception("No valid template source found for <$tagName>");
         }
 
-        // Load CSS (if available) and JS from cache.
+        // Load CSS (if available) and JS.
         $cssContent = ($embedCss && $cssPath) ? self::loadFile($cssPath) : null;
         $jsContent = self::loadFile($jsPath);
 
         // Render the component using the processed template.
         $renderedElement = $this->renderComponentWithTemplate($customElement, $templateContent, $cssContent, $embedCss);
 
-        // Wrap the JS code in a module script that registers the component if not already defined.
-        $wrappedJs = <<<EOD
-<script type="module">
-if (!customElements.get('$tagName')) {
-  $jsContent
-}
-</script>
-EOD;
-        return $renderedElement . "\n" . $wrappedJs;
+        // Collect the JS registration snippet if not already added.
+        $jsSnippet = "if (!customElements.get('$tagName')) {\n  $jsContent\n}";
+        if (!isset(self::$collectedJs[$tagName])) {
+            self::$collectedJs[$tagName] = $jsSnippet;
+        }
+        return $renderedElement;
     }
 
     /**
@@ -307,7 +306,8 @@ EOD;
 
     /**
      * Processes an entire HTML page by transforming all custom elements
-     * (i.e., elements whose tag names contain a hyphen). Processes nested components from innermost outward.
+     * (i.e., elements whose tag names contain a hyphen).
+     * Nested web components are processed from the innermost outward.
      *
      * @param string $pageHtml The full HTML code of the page.
      * @param bool $embedCss Whether CSS is embedded inline.
@@ -352,6 +352,24 @@ EOD;
                 }
             }
             $node->parentNode->replaceChild($fragment, $node);
+        }
+        // After processing all custom elements, insert collected JS into <head>
+        if (!empty(self::$collectedJs)) {
+            $allJs = implode("\n", self::$collectedJs);
+            $head = $doc->getElementsByTagName("head")->item(0);
+            if ($head) {
+                $script = $doc->createElement("script", "\n" . $allJs . "\n");
+                $script->setAttribute("type", "module");
+                $head->appendChild($script);
+            } else {
+                // If no head is present, append to the end of <body>
+                $body = $doc->getElementsByTagName("body")->item(0);
+                if ($body) {
+                    $script = $doc->createElement("script", "\n" . $allJs . "\n");
+                    $script->setAttribute("type", "module");
+                    $body->appendChild($script);
+                }
+            }
         }
         return $doc->saveHTML();
     }
