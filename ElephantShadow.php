@@ -26,9 +26,17 @@ class ElephantShadow
      */
     public function __construct($templateDir = null, $cssDir = null, $jsDir = null)
     {
-        $this->templateDir = $templateDir ?: __DIR__ . '/templates/';
-        $this->cssDir      = $cssDir      ?: __DIR__ . '/css/';
-        $this->jsDir       = $jsDir       ?: __DIR__ . '/js/';
+        $this->templateDir = $templateDir ?: __DIR__ . DIRECTORY_SEPARATOR . 'templates' . DIRECTORY_SEPARATOR;
+        $this->templateDir = trim($this->templateDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+        $this->cssDir = $cssDir ?: __DIR__ . DIRECTORY_SEPARATOR . 'css' . DIRECTORY_SEPARATOR;
+        $this->cssDir = trim($this->cssDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+        $this->jsDir = $jsDir ?: __DIR__ . DIRECTORY_SEPARATOR . 'js' . DIRECTORY_SEPARATOR;
+        $this->jsDir = trim($this->jsDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+
+        // Debugging output
+        error_log("Template Dir: " . $this->templateDir);
+        error_log("CSS Dir: " . $this->cssDir);
+        error_log("JS Dir: " . $this->jsDir);
     }
 
     /**
@@ -425,11 +433,10 @@ class ElephantShadow
      *
      * @param bool $embedCss Whether CSS is embedded inline.
      */
-    public static function init($embedCss = true)
+    public function init($embedCss = true)
     {
         ob_start(function ($buffer) use ($embedCss) {
-            $renderer = new self();
-            return $renderer->renderFullPage($buffer, $embedCss);
+            return $this->renderFullPage($buffer, $embedCss);
         });
     }
 }

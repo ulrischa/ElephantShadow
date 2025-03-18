@@ -1,0 +1,8 @@
+/* css/my-component.css */
+:host {
+    display: block;
+    padding: 10px;
+    background: #f0f0f0;
+    border-radius: 5px;
+    font-family: Arial, sans-serif;
+}
