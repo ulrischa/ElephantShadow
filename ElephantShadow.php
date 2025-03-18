@@ -32,11 +32,6 @@ class ElephantShadow
         $this->cssDir = trim($this->cssDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
         $this->jsDir = $jsDir ?: __DIR__ . DIRECTORY_SEPARATOR . 'js' . DIRECTORY_SEPARATOR;
         $this->jsDir = trim($this->jsDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
-
-        // Debugging output
-        error_log("Template Dir: " . $this->templateDir);
-        error_log("CSS Dir: " . $this->cssDir);
-        error_log("JS Dir: " . $this->jsDir);
     }
 
     /**
