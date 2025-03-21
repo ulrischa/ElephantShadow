@@ -1,5 +1,7 @@
 <?php
-
+//TODOS:
+// - Check nested custom elements
+// - style von css Datei einfügen bei full page
 class ElephantShadow
 {
     // Default directories for resources
@@ -14,9 +16,10 @@ class ElephantShadow
     // Cache for loaded files (filepath => content)
     private static $fileCache = [];
 
-    // Collected JS snippets keyed by component tag name
-    private static $collectedJs = [];
+     // Collected JS snippets keyed by component tag name
+     private static $collectedJs = [];
 
+    
     /**
      * Constructor to set default directories.
      *
@@ -32,11 +35,6 @@ class ElephantShadow
         $this->cssDir = trim($this->cssDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
         $this->jsDir = $jsDir ?: __DIR__ . DIRECTORY_SEPARATOR . 'js' . DIRECTORY_SEPARATOR;
         $this->jsDir = trim($this->jsDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
-
-        // Debugging output
-        error_log("Template Dir: " . $this->templateDir);
-        error_log("CSS Dir: " . $this->cssDir);
-        error_log("JS Dir: " . $this->jsDir);
     }
 
     /**
@@ -55,7 +53,6 @@ class ElephantShadow
         if ($content === false) {
             throw new Exception("Could not load file: $filePath");
         }
-        $content = mb_convert_encoding($content, 'HTML-ENTITIES', 'UTF-8');
         self::$fileCache[$filePath] = $content;
         return $content;
     }
@@ -132,7 +129,6 @@ class ElephantShadow
             if ($node->hasAttribute('data-bind')) {
                 $bindAttr = $node->getAttribute('data-bind');
                 $value = $sourceElement->getAttribute($bindAttr);
-                $node->nodeValue = htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
             }
         }
     }
@@ -208,7 +204,7 @@ class ElephantShadow
         $result = '<' . $tag;
         foreach ($element->attributes as $attr) {
             $name = $attr->name;
-            $value = htmlspecialchars($attr->value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $value = $attr->value;
             $result .= " $name=\"$value\"";
         }
         $result .= '>' . $shadowContent;
@@ -231,15 +227,16 @@ class ElephantShadow
      * @param string|null $jsPath       Optional explicit JS path.
      * @param string|null $cssPath      Optional explicit CSS path.
      * @param bool        $embedCss     If true, embed CSS inline.
+     * @param bool        $includeJs    If true, include JS content in the rendered element.
      * @return string The SSR-rendered HTML of the custom element.
      */
-    public function renderWebComponent($elementHtml, $templatePath = null, $jsPath = null, $cssPath = null, $embedCss = true): string
+    public function renderWebComponent($elementHtml, $templatePath = null, $jsPath = null, $cssPath = null, $embedCss = true, $includeJs = true): string
     {
         $doc = $this->loadHTMLtoDOM($elementHtml);
         // Assume the document element is the custom element.
         $customElement = $doc->documentElement;
         $tagName = strtolower($customElement->tagName);
-        //Custom Element?
+        // Custom Element?
         if (strpos($tagName, '-') !== false) {
             // Resolve resource paths using data attributes or naming conventions.
             list($templatePath, $cssPath, $jsPath) = $this->resolveResourcePaths($customElement, $tagName, $templatePath, $cssPath, $jsPath);
@@ -255,6 +252,17 @@ class ElephantShadow
             // Load CSS (if available) and JS.
             $cssContent = ($embedCss && $cssPath) ? self::loadFile($cssPath) : null;
             $jsContent = self::loadFile($jsPath);
+
+            // Check if the JS file already contains a <style> tag
+            if ($cssContent && strpos($jsContent, '<style>') === false) {
+                // Embed the CSS into the render function of the JS file
+                $jsContent = preg_replace(
+                    '/(this\.shadowRoot\.innerHTML\s*=\s*`)/',
+                    '$1<style>' . addslashes($cssContent) . '</style>',
+                    $jsContent
+                );
+            }
+
             // Render the component using the processed template.
             $renderedElement = $this->renderComponentWithTemplate($customElement, $templateContent, $cssContent, $embedCss);
             // Collect the JS registration snippet if not already added.
@@ -262,41 +270,15 @@ class ElephantShadow
             if (!isset(self::$collectedJs[$tagName])) {
                 self::$collectedJs[$tagName] = $jsSnippet;
             }
+            // Optionally include the JS content in the rendered element.
+            if ($includeJs) {
+                $renderedElement .= '<script>' . $jsSnippet . '</script>';
+            }
             return $renderedElement;
         } else {
-            throw new Exception("<$tagName> is not a custom element. No hyohen in name");
+            throw new Exception("<$tagName> is not a custom element. No hyphen in name");
         }
     }
-
-    // /**
-    //  * Recursively renders a DOMNode.
-    //  * Escapes text nodes and builds element nodes with their attributes and children.
-    //  *
-    //  * @param DOMNode $node
-    //  * @return string
-    //  */
-    // private function renderNode(DOMNode $node): string {
-    //     if ($node instanceof DOMText) {
-    //         return htmlspecialchars($node->nodeValue, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-    //     }
-    //     if ($node instanceof DOMElement) {
-    //         $tagName = $node->tagName;
-    //         $html = '<' . $tagName;
-    //         foreach ($node->attributes as $attr) {
-    //             $name = $attr->name;
-    //             $value = htmlspecialchars($attr->value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-    //             $html .= " $name=\"$value\"";
-    //         }
-    //         $html .= '>';
-    //         foreach ($node->childNodes as $child) {
-    //             $html .= $this->renderNode($child);
-    //         }
-    //         $html .= "</$tagName>";
-    //         return $html;
-    //     }
-    //     return '';
-    // }
-
 
     /**
      * Simplified method to render a DOMNode as an HTML string using the built-in DOMDocument::saveHTML().
@@ -350,12 +332,10 @@ class ElephantShadow
      */
     private function loadHTMLtoDOM($html)
     {
-        // Convert input HTML to UTF-8.
-        $elementHtml = mb_convert_encoding($html, 'HTML-ENTITIES', 'UTF-8');
         $doc = new DOMDocument();
         libxml_use_internal_errors(true);
-        // Load the element as a fragment.
-        $doc->loadHTML($elementHtml, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+        // Load the raw HTML as a fragment.
+        $doc->loadHTML($html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
         libxml_clear_errors();
         return $doc;
     }
@@ -390,7 +370,7 @@ class ElephantShadow
         foreach ($nodesToProcess as $item) {
             $node = $item['node'];
             $elementHtml = $doc->saveHTML($node);
-            $rendered = $this->renderWebComponent($elementHtml, null, null, null, $embedCss);
+            $rendered = $this->renderWebComponent($elementHtml, null, null, null, $embedCss, false);
             $fragment = $doc->createDocumentFragment();
             $tmpDoc = new DOMDocument();
             libxml_use_internal_errors(true);
@@ -439,4 +419,6 @@ class ElephantShadow
             return $this->renderFullPage($buffer, $embedCss);
         });
     }
+
+   
 }

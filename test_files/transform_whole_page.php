@@ -3,7 +3,7 @@ ini_set('display_errors', '1');
 ini_set('display_startup_errors', '1');
 error_reporting(E_ALL);
 require '../ElephantShadow.php';
-$el = new ElephantShadow(__DIR__ . '\\templates\\', __DIR__ . '\\css\\', __DIR__ . '\\js\\');
+$el = new ElephantShadow(__DIR__ . '/templates/', __DIR__ . '/css/', __DIR__ . '/js/');
 $el->init();
 ?>
 <!DOCTYPE html>

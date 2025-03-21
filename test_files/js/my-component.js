@@ -23,17 +23,9 @@ class MyComponent extends HTMLElement {
           });
     }
     render() {
+        // Style will be inserted here
         this.shadowRoot.innerHTML = `
-            <style>
-                :host {
-                    display: block;
-                    padding: 10px;
-                    background: #f0f0f0;
-                    border-radius: 5px;
-                    font-family: Arial, sans-serif;
-                }
-            </style>
-            <p>${this.getAttribute('message') || 'Default message'}</p>
+            <p>Display here the attribute value too: ${this.getAttribute('message') || 'Default message'}</p>
             <div>
                 <h3>Child Elements:</h3>
                 <ul>
