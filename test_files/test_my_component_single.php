@@ -16,6 +16,7 @@ $rendered_component = $el->renderWebComponent(
   <title>My SSR Page Single test</title>
 </head>
 <body>
+  <h1>Test my component</h1>
 <?php echo $rendered_component; ?>
 
 </body>

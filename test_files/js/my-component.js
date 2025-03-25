@@ -2,7 +2,10 @@
 class MyComponent extends HTMLElement {
     constructor() {
         super();
-        this.attachShadow({ mode: 'open' });
+        // Only attach a shadowRoot if one doesn't already exist (from SSR)
+        if (!this.shadowRoot) {
+            this.attachShadow({ mode: 'open' });
+        }
     }
     static get observedAttributes() {
         return ['message'];
@@ -13,30 +16,35 @@ class MyComponent extends HTMLElement {
         }
     }
     connectedCallback() {
+        // Check for a declarative shadow template inserted by ElephantShadow.
+        const template = this.shadowRoot.querySelector('template');
+        if (template) {
+            // Clone the content into the shadow DOM and remove the template.
+            this.shadowRoot.appendChild(template.content.cloneNode(true));
+            template.remove();
+        }
         this.render();
-        // Attach a click event listener to the button
-        // Klick-Handler hinzufügen
-        this.shadowRoot.querySelector('button').addEventListener('click', () => {
-            const attrValue = this.getAttribute('message');
-            console.log('Attributwert:', attrValue);
-            alert('Attributwert: ' + attrValue);
-          });
     }
     render() {
-        // Style will be inserted here
-        this.shadowRoot.innerHTML = `
-            <p>Display here the attribute value too: ${this.getAttribute('message') || 'Default message'}</p>
-            <div>
-                <h3>Child Elements:</h3>
-                <ul>
-                    <li>Item 1</li>
-                    <li>Item 2</li>
-                    <li>Item 3</li>
-                </ul>
-                <button>Click me</button>
-            </div>
-            <slot></slot>
-        `;
+        const dynamicContainer = this.shadowRoot.getElementById('dynamic-content');
+        if (dynamicContainer) {
+            dynamicContainer.innerHTML = `
+                <div>
+                    <h3>This is from the JS file. We are progressively enhancing it:</h3>
+                     <p>Display here the attribute value too: ${this.getAttribute('message') || 'Default message'}</p>
+                    <button>Click me</button>
+                </div>
+            `;
+            // Now attach the click event listener after the button is in the DOM.
+            const button = dynamicContainer.querySelector('button');
+            if (button) {
+                button.addEventListener('click', () => {
+                    const attrValue = this.getAttribute('message');
+                    console.log('Attributwert:', attrValue);
+                    alert('Attributwert: ' + attrValue);
+                });
+            }
+        }
     }
 }
 customElements.define('my-component', MyComponent);

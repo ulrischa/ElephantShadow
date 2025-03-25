@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <nineties-button>
+        <template shadowrootmode="open">
+          <style>
+            button {
+              color: seagreen;
+            }
+          </style>
+          <button>
+            <slot name="my-button">Init</slot>
+          </button>
+        </template>
+        <span slot="my-button">Let's have some different text!</span>
+        Will go nowhere
+      </nineties-button>
+</body>
+</html>

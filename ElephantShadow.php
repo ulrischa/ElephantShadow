@@ -194,21 +194,23 @@ class ElephantShadow
      * @param bool $embedCss Whether to embed CSS inline.
      * @return string The rendered HTML for the custom element.
      */
-    private function renderComponentWithTemplate(DOMElement $element, string $templateContent, ?string $cssContent, bool $embedCss): string
+    private function renderComponentWithTemplate(DOMElement $element, string $templateContent, ?string $cssContent, bool $embedCss, string $shadowrootmode): string
     {
         $tag = $element->tagName;
         $processedTemplate = $this->loadAndProcessTemplate($templateContent, $element, $cssContent, $embedCss);
         //TODO: Allow closed
-        $shadowContent = '<template shadowrootmode="open">' . $processedTemplate . '</template>';
-        // Rebuild host element with original attributes and light DOM children.
+        $shadowContent = '<template shadowrootmode="'.$shadowrootmode.'">' . $processedTemplate . '</template>';
+        // Rebuild host element with original attributes.
         $result = '<' . $tag;
         foreach ($element->attributes as $attr) {
-            $name = $attr->name;
-            $value = $attr->value;
-            $result .= " $name=\"$value\"";
+            $result .= " {$attr->name}=\"{$attr->value}\"";
         }
         $result .= '>' . $shadowContent;
+        // Append only light DOM children that are not already processed (i.e. skip nodes with a "slot" attribute)
         foreach ($element->childNodes as $childNode) {
+            if ($childNode instanceof DOMElement && $childNode->hasAttribute('slot')) {
+                continue;
+            }
             $result .= $this->renderNode($childNode);
         }
         $result .= "</$tag>";
@@ -228,9 +230,10 @@ class ElephantShadow
      * @param string|null $cssPath      Optional explicit CSS path.
      * @param bool        $embedCss     If true, embed CSS inline.
      * @param bool        $includeJs    If true, include JS content in the rendered element.
+     * @param string      $shadowrootmode The shadow root mode to use for the custom element.
      * @return string The SSR-rendered HTML of the custom element.
      */
-    public function renderWebComponent($elementHtml, $templatePath = null, $jsPath = null, $cssPath = null, $embedCss = true, $includeJs = true): string
+    public function renderWebComponent(string $elementHtml, ?string $templatePath = null, ?string $jsPath = null, ?string $cssPath = null, bool $embedCss = true, bool $includeJs = true, string $shadowrootmode = 'open'): string
     {
         $doc = $this->loadHTMLtoDOM($elementHtml);
         // Assume the document element is the custom element.
@@ -264,7 +267,7 @@ class ElephantShadow
             }
 
             // Render the component using the processed template.
-            $renderedElement = $this->renderComponentWithTemplate($customElement, $templateContent, $cssContent, $embedCss);
+            $renderedElement = $this->renderComponentWithTemplate($customElement, $templateContent, $cssContent, $embedCss, $shadowrootmode);
             // Collect the JS registration snippet if not already added.
             $jsSnippet = "if (!customElements.get('$tagName')) {\n  $jsContent\n}";
             if (!isset(self::$collectedJs[$tagName])) {
@@ -316,7 +319,7 @@ class ElephantShadow
                 continue;
             }
             $assignedSlot = $child->getAttribute('slot');
-            if ($assignedSlot === '') {
+            if ($assignedSlot === '' || $assignedSlot === 'default') { // treat "default" as __default__
                 $assignedSlot = '__default__';
             }
             $groups[$assignedSlot][] = $child;
