@@ -224,6 +224,26 @@ class ElephantShadow
         return $result;
     }
 
+    private function safeguarAttachShadow($jsContent, $shadowrootmode) {
+          // Define regex patterns.
+          $patternAssignment = '/\b(let|const|var)\s+(\w+)\s*=\s*this\.attachShadow\s*\(\s*\{\s*mode\s*:\s*[\'"](open|closed)[\'"]\s*\}\s*\)\s*;/';
+          $patternNoAssignment = '/^\s*this\.attachShadow\s*\(\s*\{\s*mode\s*:\s*[\'"](open|closed)[\'"]\s*\}\s*\)\s*;?\s*$/m';
+
+          // First handle cases where attachShadow is assigned.
+          $jsContent = preg_replace_callback($patternAssignment, function($matches) use ($shadowrootmode) {
+              // Return a conditional expression that safely assigns the value.
+              return "{$matches[1]} {$matches[2]} = (this.shadowRoot && this.shadowRoot.innerHTML.trim()) ? this.shadowRoot : this.attachShadow({ mode: '{$shadowrootmode}' });";
+          }, $jsContent);
+
+          // Then replace any standalone attachShadow call with an if-statement.
+          $jsContent = preg_replace_callback($patternNoAssignment, function($matches) use ($shadowrootmode) {
+              return "if (!this.shadowRoot || !this.shadowRoot.innerHTML.trim()) { this.attachShadow({ mode: '{$shadowrootmode}' }); }";
+          }, $jsContent);
+
+          return $jsContent;
+
+    }
+
     /**
      * Public method to render a single custom element.
      * Accepts the HTML string of the custom element, resolves its resources,
@@ -263,20 +283,8 @@ class ElephantShadow
             $cssContent = ($embedCss && $cssPath) ? self::loadFile($cssPath) : null;
             $jsContent = self::loadFile($jsPath);
 
-            // Define regex patterns.
-            $patternAssignment = '/\b(let|const|var)\s+(\w+)\s*=\s*this\.attachShadow\s*\(\s*\{\s*mode\s*:\s*[\'"](open|closed)[\'"]\s*\}\s*\)\s*;/';
-            $patternNoAssignment = '/^\s*this\.attachShadow\s*\(\s*\{\s*mode\s*:\s*[\'"](open|closed)[\'"]\s*\}\s*\)\s*;?\s*$/m';
-
-            // First handle cases where attachShadow is assigned.
-            $jsContent = preg_replace_callback($patternAssignment, function($matches) use ($shadowrootmode) {
-                // Return a conditional expression that safely assigns the value.
-                return "{$matches[1]} {$matches[2]} = (this.shadowRoot && this.shadowRoot.innerHTML.trim()) ? this.shadowRoot : this.attachShadow({ mode: '{$shadowrootmode}' });";
-            }, $jsContent);
-
-            // Then replace any standalone attachShadow call with an if-statement.
-            $jsContent = preg_replace_callback($patternNoAssignment, function($matches) use ($shadowrootmode) {
-                return "if (!this.shadowRoot || !this.shadowRoot.innerHTML.trim()) { this.attachShadow({ mode: '{$shadowrootmode}' }); }";
-            }, $jsContent);
+            // Safeguard attachShadow calls in the JS content.
+            $jsContent = $this->safeguarAttachShadow($jsContent, $shadowrootmode);
 
             // Check if the JS file already contains a <style> tag
             if ($cssContent && strpos($jsContent, '<style>') === false) {
