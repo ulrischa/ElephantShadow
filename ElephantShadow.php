@@ -146,20 +146,27 @@ class ElephantShadow
     private function loadAndProcessTemplate(string $templateContent, DOMElement $sourceElement, ?string $cssContent, bool $embedCss): string
     {
         $templateDom = new DOMDocument();
-        // Load the template HTML wrapped in a <template> tag
-        @$templateDom->loadHTML('<?xml encoding="UTF-8"><template>' . $templateContent . '</template>');
+        // Check if the template content already includes a <template> tag.
+        $trimmedContent = trim($templateContent);
+        if (stripos($trimmedContent, '<template') === 0) {
+            // Use the content as provided.
+            @$templateDom->loadHTML('<?xml encoding="UTF-8">' . $templateContent);
+        } else {
+            // Wrap the content in a <template> tag.
+            @$templateDom->loadHTML('<?xml encoding="UTF-8"><template>' . $templateContent . '</template>');
+        }
         $templateTag = $templateDom->getElementsByTagName('template')->item(0);
-        // Process data bindings
+        // Process data bindings.
         $this->processDataBindings($templateTag, $sourceElement);
         $processedTemplate = '';
         foreach ($templateTag->childNodes as $child) {
             $processedTemplate .= $templateDom->saveHTML($child);
         }
-        // Optionally embed CSS inline
+        // Optionally embed CSS inline.
         if ($embedCss && $cssContent) {
             $processedTemplate = '<style>' . $cssContent . '</style>' . $processedTemplate;
         }
-        // Process slots
+        // Process <slot> elements.
         @$templateDom->loadHTML('<?xml encoding="UTF-8"><template>' . $processedTemplate . '</template>');
         $templateTag = $templateDom->getElementsByTagName('template')->item(0);
         $slots = iterator_to_array($templateTag->getElementsByTagName('slot'));
@@ -173,7 +180,7 @@ class ElephantShadow
                     $replacementHtml .= $this->renderNode($childNode);
                 }
             } else {
-                // Use fallback content inside the <slot> element
+                // Use fallback content inside the <slot> element.
                 foreach ($slotElement->childNodes as $fallbackNode) {
                     $replacementHtml .= $templateDom->saveHTML($fallbackNode);
                 }
@@ -256,9 +263,24 @@ class ElephantShadow
             $cssContent = ($embedCss && $cssPath) ? self::loadFile($cssPath) : null;
             $jsContent = self::loadFile($jsPath);
 
+            // Define regex patterns.
+            $patternAssignment = '/\b(let|const|var)\s+(\w+)\s*=\s*this\.attachShadow\s*\(\s*\{\s*mode\s*:\s*[\'"](open|closed)[\'"]\s*\}\s*\)\s*;/';
+            $patternNoAssignment = '/^\s*this\.attachShadow\s*\(\s*\{\s*mode\s*:\s*[\'"](open|closed)[\'"]\s*\}\s*\)\s*;?\s*$/m';
+
+            // First handle cases where attachShadow is assigned.
+            $jsContent = preg_replace_callback($patternAssignment, function($matches) use ($shadowrootmode) {
+                // Return a conditional expression that safely assigns the value.
+                return "{$matches[1]} {$matches[2]} = (this.shadowRoot && this.shadowRoot.innerHTML.trim()) ? this.shadowRoot : this.attachShadow({ mode: '{$shadowrootmode}' });";
+            }, $jsContent);
+
+            // Then replace any standalone attachShadow call with an if-statement.
+            $jsContent = preg_replace_callback($patternNoAssignment, function($matches) use ($shadowrootmode) {
+                return "if (!this.shadowRoot || !this.shadowRoot.innerHTML.trim()) { this.attachShadow({ mode: '{$shadowrootmode}' }); }";
+            }, $jsContent);
+
             // Check if the JS file already contains a <style> tag
             if ($cssContent && strpos($jsContent, '<style>') === false) {
-                // Embed the CSS into the render function of the JS file
+                // Embed the CSS into the render function of the JS file.
                 $jsContent = preg_replace(
                     '/(this\.shadowRoot\.innerHTML\s*=\s*`)/',
                     '$1<style>' . addslashes($cssContent) . '</style>',

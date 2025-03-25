@@ -17,6 +17,8 @@ $el->init();
   <my-component message="Hello from SSR">
     <p slot="default">This is additional slot content.</p>
   </my-component>
+  <hr />
+  <my-paragraph></my-paragraph>
 
 </body>
 </html>

@@ -2,10 +2,9 @@
 class MyComponent extends HTMLElement {
     constructor() {
         super();
-        // Only attach a shadowRoot if one doesn't already exist (from SSR)
-        if (!this.shadowRoot) {
+
             this.attachShadow({ mode: 'open' });
-        }
+        
     }
     static get observedAttributes() {
         return ['message'];
