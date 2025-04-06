@@ -1,6 +1,5 @@
 **HEAVILY UNDER CONTRUCTION GAMECHANGER AHEAD**
-
-![SmartSelect_20250315_192848_Chrome](https://github.com/user-attachments/assets/4f638d83-7a7e-4416-a548-1875b7cf2fef)
+![image](https://github.com/user-attachments/assets/d9816839-68f2-4a84-bcd8-15aa4b904707)
 
 
 # ElephantShadow
