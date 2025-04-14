@@ -1,7 +1,4 @@
 <?php
-//TODOS:
-// - Check nested custom elements
-// - style von css Datei einfügen bei full page
 class ElephantShadow
 {
     // Default directories for resources
