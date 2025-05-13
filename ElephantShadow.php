@@ -448,7 +448,5 @@ class ElephantShadow
         ob_start(function ($buffer) use ($embedCss) {
             return $this->renderFullPage($buffer, $embedCss);
         });
-    }
-
-   
+    }  
 }
