@@ -5,7 +5,7 @@
 # ElephantShadow
 Use PHP for SSR of Webcomponents in declarative shadow dom. Just take the old elephant - he has a big shadow.
 
-**ElephantShadow** is a PHP-based SSR on-file throw in thing for Web Components. It lets you write standard custom elements (using attributes and slots) that are automatically transformed into fully rendered components with declarative Shadow DOM. This ensures that your page is SEO-friendly, accessible, and provides a usable fallback when JavaScript is disabled.
+**ElephantShadow** is a PHP-based SSR one-file-throw-in-thing for Web Components. It lets you write standard custom elements (using attributes and slots) that are automatically transformed into fully rendered components with declarative Shadow DOM. This ensures that your page is SEO-friendly, accessible, and provides a usable fallback when JavaScript is disabled.
 
 ## Key Features
 
